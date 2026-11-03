@@ -96,6 +96,20 @@ def test_decline_then_new_attempt_does_not_extend_reserve(client, db):
     assert result["reservation"]["expires_at"] == until
 
 
+def test_switching_provider_preserves_mock_payment_provenance(client, monkeypatch):
+    paid = settle(client)
+    monkeypatch.setattr(settings(), "payment_provider", "yookassa_test")
+    previous = client.get("/api/orders/" + paid["id"]).json()
+    assert previous["provider"] == "mock"
+    assert previous["payments"][0]["provider"] == "mock"
+    assert previous["demo_enabled"] is False
+    assert previous["accepted_payment_id"] == paid["accepted_payment_id"]
+    fresh = client.post("/api/orders", json=payload(client)).json()
+    assert fresh["provider"] == "yookassa_test"
+    assert fresh["demo_enabled"] is False
+    assert fresh["payments"] == []
+
+
 def test_lost_webhook_and_closed_page_recovered_by_reconciliation(client, db):
     order = order_and_payment(client)
     p = order["payments"][0]

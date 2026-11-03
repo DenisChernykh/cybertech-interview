@@ -184,6 +184,7 @@ export default function PaymentPanel({
                 Попытка {n + 1} · {states[p.status || p.state] || p.state}
               </strong>
               <span>{rub(p.amount)}</span>
+              <small>{p.provider === "mock" ? "Mock" : "ЮKassa · тестовый режим"}</small>
               {p.checked_at && <small>Проверено: {date(p.checked_at)}</small>}
               {manager && p.provider_id && <small className="mono">{p.provider_id}</small>}
               {Number(p.refunded_amount) > 0 && (
@@ -220,6 +221,7 @@ export default function PaymentPanel({
             </Button>
           )}
           {manager &&
+            order.demo_enabled &&
             order.provider === "mock" &&
             r.attempts
               .filter((a) => a.provider_id && a.status === "pending")
@@ -264,17 +266,20 @@ export default function PaymentPanel({
             <div className="receipt-row" key={r.id}>
               <span>{kinds[r.kind]}</span>
               <Badge variant="outline">{states[r.status] || r.status}</Badge>
-              {manager && order.provider === "mock" && r.status === "failed" && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() =>
-                    command("/manager/demo/receipts/" + r.id, { outcome: "succeeded" })
-                  }
-                >
-                  Касса восстановлена · Mock
-                </Button>
-              )}
+              {manager &&
+                order.demo_enabled &&
+                order.provider === "mock" &&
+                r.status === "failed" && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() =>
+                      command("/manager/demo/receipts/" + r.id, { outcome: "succeeded" })
+                    }
+                  >
+                    Касса восстановлена · Mock
+                  </Button>
+                )}
             </div>
           ))}
         </section>
@@ -286,18 +291,21 @@ export default function PaymentPanel({
             <p>{i.message}</p>
           </div>
         ))}
-      {manager && order.provider === "mock" && order.reservation.status === "held" && (
-        <div className="demo-controls">
-          <p className="eyebrow">Проверка срока резерва</p>
-          <Button
-            variant="outline"
-            disabled={busy}
-            onClick={() => command("/manager/demo/orders/" + order.id + "/expire")}
-          >
-            Завершить резерв · Mock
-          </Button>
-        </div>
-      )}
+      {manager &&
+        order.demo_enabled &&
+        order.provider === "mock" &&
+        order.reservation.status === "held" && (
+          <div className="demo-controls">
+            <p className="eyebrow">Проверка срока резерва</p>
+            <Button
+              variant="outline"
+              disabled={busy}
+              onClick={() => command("/manager/demo/orders/" + order.id + "/expire")}
+            >
+              Завершить резерв · Mock
+            </Button>
+          </div>
+        )}
       <ActionDialog
         open={refundOpen}
         onOpenChange={setRefundOpen}

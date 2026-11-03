@@ -50,8 +50,10 @@ export type Quote = {
 export type Order = {
   accepted_payment_id?: string | null
   provider?: string
+  demo_enabled?: boolean
   payments?: {
     id: string
+    provider: string
     status: string | null
     state: string
     amount: string

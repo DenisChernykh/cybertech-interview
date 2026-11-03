@@ -577,13 +577,18 @@ def order_finances(db, order, manager=False):
     ]
     reservation = db.get(Reservation, order.id)
     accepted = db.get(Payment, order.accepted_payment_id) if order.accepted_payment_id else None
+    displayed_payment = accepted or active or (payments[-1] if payments else None)
     return {
         "payment_policy": order.payment_policy,
         "accepted_payment_id": order.accepted_payment_id,
-        "provider": settings().payment_provider,
+        "provider": displayed_payment.provider
+        if displayed_payment
+        else settings().payment_provider,
+        "demo_enabled": settings().payment_provider == "mock",
         "payments": [
             {
                 "id": p.id,
+                "provider": p.provider,
                 "status": p.provider_status,
                 "state": p.state,
                 "amount": money(p.amount),
