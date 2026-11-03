@@ -111,9 +111,6 @@ export default function Catalog({
               ))}
           </div>
         )}
-        <p className="caption">
-          Средства и упаковки вымышлены. Фотография коллекции — иллюстрация.
-        </p>
       </section>
     </>
   )

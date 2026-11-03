@@ -25,7 +25,6 @@ export default function App() {
   const count = Object.values(cart).reduce((a, b) => a + b, 0)
   return (
     <>
-      <div className="demo-strip">Учебный магазин · реальные покупки не совершаются</div>
       <header className="header">
         <Link className="brand" to="/">
           <Leaf size={26} strokeWidth={1.3} /> лист<span>ежедневный уход</span>
@@ -66,7 +65,6 @@ export default function App() {
       <footer>
         <span className="brand">лист</span>
         <span>Небольшие привычки. Забота о себе.</span>
-        <span>Демонстрационный проект · 2026</span>
       </footer>
     </>
   )

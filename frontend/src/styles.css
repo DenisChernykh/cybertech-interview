@@ -73,13 +73,6 @@ p {
 small {
   display: block;
 }
-.demo-strip {
-  padding: 7px 24px;
-  background: #e9ede3;
-  text-align: center;
-  font-size: 11px;
-  letter-spacing: 0.03em;
-}
 .header {
   max-width: 1400px;
   margin: auto;
@@ -363,11 +356,6 @@ small {
   min-width: 12px;
   font-size: 12px;
   text-align: center;
-}
-.caption {
-  font-size: 10px;
-  color: #92978b;
-  margin-top: 25px;
 }
 .back {
   display: inline-flex;
@@ -736,9 +724,6 @@ footer .brand {
   footer {
     padding: 25px 20px;
     flex-wrap: wrap;
-  }
-  footer > span:last-child {
-    width: 100%;
   }
   .actions > button {
     width: 100%;
