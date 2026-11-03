@@ -1,67 +1,73 @@
-import { useCallback, useEffect, useState, type FormEvent } from "react"
-import { Link, Route, Routes, useNavigate, useParams } from "react-router-dom"
-import { ArrowUpRight, ArrowLeft, ShoppingBag, Plus, Minus, Leaf, Check, RefreshCw } from "lucide-react"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Badge } from "@/components/ui/badge"
-import { api, ApiError, rub, date, statusName, type Product, type Quote, type Order } from "@/lib/api"
+import { useState } from "react"
+import { Link, Route, Routes } from "react-router-dom"
+import { Leaf, ShoppingBag } from "lucide-react"
+import { loadCart, type Cart } from "@/lib/cart"
+import Catalog from "@/features/catalog/Catalog"
+import Checkout from "@/features/checkout/Checkout"
+import MyOrders from "@/features/order/OrderList"
+import OrderPage from "@/features/order/OrderPage"
+import MockCheckout from "@/features/order/MockCheckout"
+import Manager from "@/features/manager/Manager"
 
-type Cart = Record<number,number>
-function loadCart():Cart { try { return JSON.parse(localStorage.getItem("list-cart") || "{}") } catch { return {} } }
-function Notice({message}:{message:string}) { return message ? <div className="notice" role="alert">{message}</div> : null }
-function Loading(){ return <p className="muted loading" role="status">Загружаем…</p> }
-function Tag({status}:{status:string}) { return <Badge variant="outline" className={"status status-"+status}>{statusName[status] || status}</Badge> }
-
-export default function App(){
- const [cart,setCart] = useState<Cart>(loadCart)
- const change = (id:number,delta:number) => setCart(old=>{const next={...old,[id]:Math.max(0,(old[id]||0)+delta)};if(!next[id])delete next[id];localStorage.setItem("list-cart",JSON.stringify(next));return next})
- const clear = () => {setCart({});localStorage.removeItem("list-cart")}
- const count=Object.values(cart).reduce((a,b)=>a+b,0)
- return <><div className="demo-strip">Учебный магазин · реальные покупки не совершаются</div><header className="header"><Link className="brand" to="/"><Leaf size={26} strokeWidth={1.3}/> лист<span>ежедневный уход</span></Link><nav aria-label="Главное меню"><Link to="/orders">Мои заказы</Link><Link to="/manager">Менеджер</Link><Link className="bag" to="/checkout"><ShoppingBag size={19}/><span>Корзина</span><b>{count}</b></Link></nav></header><main><Routes>
- <Route path="/" element={<Catalog cart={cart} change={change}/>}/>
- <Route path="/checkout" element={<Checkout cart={cart} change={change} clear={clear}/>}/>
- <Route path="/orders" element={<MyOrders/>}/>
- <Route path="/orders/:id" element={<OrderPage/>}/>
- <Route path="/manager" element={<Manager/>}/>
- <Route path="/manager/orders/:id" element={<OrderPage manager/>}/>
- <Route path="*" element={<section className="page"><h1>Страница не найдена</h1><Link to="/">В магазин</Link></section>}/>
- </Routes></main><footer><span className="brand">лист</span><span>Небольшие привычки. Забота о себе.</span><span>Демонстрационный проект · 2026</span></footer></>
+export default function App() {
+  const [cart, setCart] = useState<Cart>(loadCart)
+  const change = (id: number, delta: number) =>
+    setCart((old) => {
+      const next = { ...old, [id]: Math.max(0, (old[id] || 0) + delta) }
+      if (!next[id]) delete next[id]
+      localStorage.setItem("list-cart", JSON.stringify(next))
+      return next
+    })
+  const clear = () => {
+    setCart({})
+    localStorage.removeItem("list-cart")
+  }
+  const count = Object.values(cart).reduce((a, b) => a + b, 0)
+  return (
+    <>
+      <div className="demo-strip">Учебный магазин · реальные покупки не совершаются</div>
+      <header className="header">
+        <Link className="brand" to="/">
+          <Leaf size={26} strokeWidth={1.3} /> лист<span>ежедневный уход</span>
+        </Link>
+        <nav aria-label="Главное меню">
+          <Link to="/orders">Мои заказы</Link>
+          <Link to="/manager">Менеджер</Link>
+          <Link className="bag" to="/checkout">
+            <ShoppingBag size={19} />
+            <span>Корзина</span>
+            <b>{count}</b>
+          </Link>
+        </nav>
+      </header>
+      <main>
+        <Routes>
+          <Route path="/" element={<Catalog cart={cart} change={change} />} />
+          <Route
+            path="/checkout"
+            element={<Checkout cart={cart} change={change} clear={clear} />}
+          />
+          <Route path="/orders" element={<MyOrders />} />
+          <Route path="/orders/:id" element={<OrderPage />} />
+          <Route path="/manager" element={<Manager />} />
+          <Route path="/demo/payments/:id" element={<MockCheckout />} />
+          <Route path="/manager/orders/:id" element={<OrderPage manager />} />
+          <Route
+            path="*"
+            element={
+              <section className="page">
+                <h1>Страница не найдена</h1>
+                <Link to="/">В магазин</Link>
+              </section>
+            }
+          />
+        </Routes>
+      </main>
+      <footer>
+        <span className="brand">лист</span>
+        <span>Небольшие привычки. Забота о себе.</span>
+        <span>Демонстрационный проект · 2026</span>
+      </footer>
+    </>
+  )
 }
-function Catalog({cart,change}:{cart:Cart;change:(id:number,delta:number)=>void}){
- const [products,setProducts]=useState<Product[]>([]),[error,setError]=useState(""),[filter,setFilter]=useState("Всё")
- useEffect(()=>{api<Product[]>("/products").then(setProducts).catch(e=>setError(e.message))},[])
- return <><section className="hero"><div><p className="eyebrow">Простой ритуал, каждый день</p><h1>Меньше лишнего.<br/><em>Больше заботы.</em></h1><p>Четыре средства для понятного ежедневного ухода.<br/>Выберите то, что нужно вашей коже.</p><a href="#catalog" className="hero-link">Найти свой уход <ArrowUpRight size={20}/></a></div><img src="/images/collection.jpg" alt="Коллекция средств для ежедневного ухода" fetchPriority="high"/></section><section id="catalog" className="catalog page"><div className="section-heading"><div><p className="eyebrow">Коллекция / 01</p><h2>Основа вашего ухода</h2></div><div className="filters">{["Всё","Очищение","Увлажнение"].map(f=><button key={f} className={filter===f?"active":""} onClick={()=>setFilter(f)}>{f}</button>)}</div></div><Notice message={error}/>{!products.length&&!error?<Loading/>:<div className="product-grid">{products.filter(p=>filter==="Всё"||p.category===filter).map((p,index)=><article className="product" key={p.id}><div className={"product-visual visual-"+p.id}><span className="product-number">0{index+1}</span><div className={"bottle bottle-"+p.id}><span className="bottle-brand">лист</span><span>{p.category}</span><small>{p.volume}</small></div><span className="product-volume">{p.volume}</span></div><div className="product-category">{p.category}</div><h3>{p.name}</h3><p>{p.description}</p><div className="product-buy"><strong>{rub(p.price)}</strong>{cart[p.id]?<div className="quantity"><button aria-label={"Уменьшить "+p.name} onClick={()=>change(p.id,-1)}><Minus size={15}/></button><span>{cart[p.id]}</span><button aria-label={"Добавить "+p.name} disabled={cart[p.id]>=p.available} onClick={()=>change(p.id,1)}><Plus size={15}/></button></div>:<Button variant="outline" disabled={!p.available} onClick={()=>change(p.id,1)}>{p.available?"В корзину":"Нет в наличии"}<Plus size={15}/></Button>}</div></article>)}</div>}<p className="caption">Средства и упаковки вымышлены. Фотография коллекции — иллюстрация.</p></section></>
-}
-function Checkout({cart,change,clear}:{cart:Cart;change:(id:number,delta:number)=>void;clear:()=>void}){
- const nav=useNavigate(),[quote,setQuote]=useState<Quote|null>(null),[error,setError]=useState(""),[busy,setBusy]=useState(false),[key,setKey]=useState(crypto.randomUUID())
- const items=Object.entries(cart).map(([id,quantity])=>({product_id:Number(id),quantity}))
- useEffect(()=>{let active=true;setQuote(null);setError("");if(items.length)api<Quote>("/checkout/quote",{items}).then(q=>{if(active)setQuote(q)}).catch(e=>active&&setError(e.message));return()=>{active=false}},[JSON.stringify(cart)])
- async function submit(e:FormEvent<HTMLFormElement>){e.preventDefault();if(!quote)return;const form=new FormData(e.currentTarget);setBusy(true);setError("");try{await api("/session",{});const order=await api<Order>("/orders",{items,customer_name:form.get("name"),email:form.get("email"),address:form.get("address"),quote_hash:quote.quote_hash,checkout_key:key});clear();nav("/orders/"+order.id)}catch(e){const err=e as ApiError;setError(err.message);if(err.code==="price_changed"){setQuote(await api<Quote>("/checkout/quote",{items}));setKey(crypto.randomUUID())}}finally{setBusy(false)}}
- return <section className="page"><Link className="back" to="/"><ArrowLeft size={16}/> Продолжить покупки</Link><h1>Оформление заказа</h1><Notice message={error}/>{!items.length?<div className="empty"><ShoppingBag/><h2>В корзине пока пусто</h2><Link to="/">Выбрать средства</Link></div>:<div className="checkout-layout"><form onSubmit={submit}><h2>Контакты и доставка</h2><div className="field"><Label htmlFor="name">Ваше имя</Label><Input id="name" name="name" required minLength={2} autoComplete="name" placeholder="Как к вам обращаться"/></div><div className="field"><Label htmlFor="email">Электронная почта</Label><Input id="email" name="email" required type="email" autoComplete="email" placeholder="name@example.ru"/></div><div className="field"><Label htmlFor="address">Адрес доставки</Label><Input id="address" name="address" required minLength={5} autoComplete="street-address" placeholder="Город, улица, дом и квартира"/></div><p className="muted">После оформления средства будут зарезервированы на 30 минут.</p><Button className="primary wide" disabled={busy||!quote}>{busy?"Оформляем…":"Оформить заказ"}<ArrowUpRight size={18}/></Button></form><aside className="summary"><p className="eyebrow">Ваш заказ</p>{quote? <>{quote.items.map(i=><div className="cart-line" key={i.product_id}><div><strong>{i.name}</strong><div className="quantity"><button aria-label={"Уменьшить "+i.name} onClick={()=>change(i.product_id,-1)}><Minus size={14}/></button><span>{i.quantity}</span><button aria-label={"Добавить "+i.name} onClick={()=>change(i.product_id,1)}><Plus size={14}/></button></div></div><span>{rub(i.total)}</span></div>)}<div className="sum-row"><span>Средства</span><span>{rub(quote.subtotal)}</span></div><div className="sum-row"><span>Доставка</span><span>{rub(quote.delivery)}</span></div><div className="sum-row total"><span>Итого</span><span>{rub(quote.total)}</span></div></>:<Loading/>}</aside></div>}</section>
-}
-function MyOrders(){
- const [orders,setOrders]=useState<Order[]|null>(null),[error,setError]=useState("")
- useEffect(()=>{api("/session",{}).then(()=>api<Order[]>("/orders")).then(setOrders).catch(e=>setError(e.message))},[])
- return <section className="page"><p className="eyebrow">Личный ритуал</p><h1>Мои заказы</h1><Notice message={error}/>{orders===null?<Loading/>:!orders.length?<div className="empty"><h2>Здесь появятся ваши заказы</h2><Link to="/">Перейти в магазин</Link></div>:<OrderList orders={orders}/>}</section>
-}
-function OrderList({orders,manager=false}:{orders:Order[];manager?:boolean}){
- return <div className="order-list">{orders.map(o=><Link key={o.id} className="order-row" to={(manager?"/manager":"")+"/orders/"+o.id}><div><strong>Заказ № {o.number}</strong><small>{date(o.created_at)}</small></div><div>{manager?o.customer_name:o.items.map(i=>i.name).join(", ")}</div><Tag status={o.status}/><strong>{rub(o.total)}</strong><ArrowUpRight size={19}/></Link>)}</div>
-}
-function OrderPage({manager=false}:{manager?:boolean}){
- const {id}=useParams(),[order,setOrder]=useState<Order|null>(null),[error,setError]=useState(""),[busy,setBusy]=useState(false)
- const path=(manager?"/manager":"")+"/orders/"+id
- const refresh=useCallback(()=>api<Order>(path).then(setOrder).catch(e=>setError(e.message)),[path])
- useEffect(()=>{void refresh();const timer=setInterval(refresh,4000);return()=>clearInterval(timer)},[refresh])
- async function action(name:string){let body:unknown={};if(name==="cancel"){const reason=window.prompt("Причина отмены");if(!reason)return;body={reason}}if(name==="release-stock"&&!window.confirm("Все товары заказа возвращены на полку?"))return;setBusy(true);setError("");try{setOrder(await api<Order>(path+"/"+name,body))}catch(e){setError((e as Error).message)}finally{setBusy(false)}}
- return <section className="page"><Link className="back" to={manager?"/manager":"/orders"}><ArrowLeft size={16}/> {manager?"Заказы магазина":"Мои заказы"}</Link><Notice message={error}/>{!order?<Loading/>:<><div className="section-heading"><div><p className="eyebrow">{date(order.created_at)}</p><h1>Заказ № {order.number}</h1></div><Tag status={order.status}/></div><div className="checkout-layout"><div><div className="state-box"><Check size={22}/><div><h2>{order.status==="canceled"?"Заказ отменён":"Заказ принят"}</h2><p>{order.cancel_reason || "Менеджер согласует с вами детали заказа."}</p></div></div><div className="detail-block"><p className="eyebrow">Состояние товара</p><h3>{statusName[order.reservation.status]}</h3>{order.reservation.status==="held"&&<p>Резерв до {date(order.reservation.expires_at)}</p>}</div><div className="detail-block"><p className="eyebrow">Доставка</p><p>{order.customer_name}<br/>{order.address}<br/>{order.email}</p></div><div className="actions">{manager&&order.actions.start_packing&&<Button disabled={busy} onClick={()=>action("start-packing")}>Начать комплектацию</Button>}{manager&&order.actions.ship&&<Button disabled={busy} onClick={()=>action("ship")}>Передать в доставку</Button>}{manager&&order.actions.complete&&<Button disabled={busy} onClick={()=>action("complete")}>Подтвердить получение</Button>}{manager&&order.actions.release_stock&&<Button disabled={busy} onClick={()=>action("release-stock")}>Товар возвращён на полку</Button>}{order.actions.cancel&&<Button variant="outline" disabled={busy} onClick={()=>action("cancel")}>Отменить заказ</Button>}</div></div><aside className="summary"><p className="eyebrow">Состав заказа</p>{order.items.map((i,n)=><div className="cart-line" key={n}><div><strong>{i.name}</strong><small>{i.quantity} × {rub(i.price)}</small></div><span>{rub(i.total)}</span></div>)}<div className="sum-row"><span>Доставка</span><span>{rub(order.delivery)}</span></div><div className="sum-row total"><span>Итого</span><span>{rub(order.total)}</span></div><p className="muted">Ручная обработка менеджером</p></aside></div>{manager&&order.history&&<div className="history"><h2>История заказа</h2>{order.history.map((e,n)=><div key={n}><time>{date(e.at)}</time><strong>{eventName[e.action]||e.action}</strong><span>{e.actor==="customer"?"Покупатель":e.actor==="manager"?"Менеджер":"Система"}</span><small>{Object.entries(e.details).map(([k,v])=>k+": "+String(v)).join(" · ")}</small></div>)}</div>}</>}</section>
-}
-const eventName:Record<string,string>={order_created:"Заказ оформлен",order_canceled:"Заказ отменён","start-packing":"Начата комплектация",ship:"Передан в доставку",complete:"Получен покупателем","release-stock":"Товар возвращён на полку"}
-function Manager(){
- const [orders,setOrders]=useState<Order[]|null>(null),[login,setLogin]=useState(false),[error,setError]=useState(""),[filter,setFilter]=useState("all"),[busy,setBusy]=useState(false)
- const refresh=useCallback(()=>api<Order[]>("/manager/orders").then(o=>{setOrders(o);setLogin(false)}).catch(e=>{if(e.status===401)setLogin(true);else setError(e.message)}),[])
- useEffect(()=>{void refresh();const t=setInterval(refresh,5000);return()=>clearInterval(t)},[refresh])
- async function signIn(e:FormEvent<HTMLFormElement>){e.preventDefault();setBusy(true);setError("");try{await api("/manager/login",{password:new FormData(e.currentTarget).get("password")});await refresh()}catch(e){setError((e as Error).message)}finally{setBusy(false)}}
- return <section className="page manager"><div className="section-heading"><div><p className="eyebrow">Рабочее пространство</p><h1>Заказы магазина</h1></div>{!login&&<Button variant="outline" onClick={()=>refresh()}><RefreshCw size={16}/> Обновить</Button>}</div><Notice message={error}/>{login?<form className="login" onSubmit={signIn}><h2>Вход для менеджера</h2><div className="field"><Label htmlFor="password">Пароль</Label><Input id="password" name="password" type="password" required autoComplete="current-password"/></div><Button className="wide" disabled={busy}>Войти</Button></form>:orders===null?<Loading/>:<><div className="filters manager-filters">{[["all","Все заказы"],["placed","Новые"],["packing","Комплектация"],["shipped","Доставка"],["canceled","Отменённые"]].map(([v,l])=><button key={v} className={filter===v?"active":""} onClick={()=>setFilter(v)}>{l}</button>)}</div>{orders.filter(o=>filter==="all"||o.status===filter).length?<OrderList manager orders={orders.filter(o=>filter==="all"||o.status===filter)}/>:<div className="empty"><h2>В этой группе пока нет заказов</h2></div>}<p className="muted">Автоматическое обновление каждые 5 секунд.</p><Button variant="ghost" onClick={async()=>{await api("/manager/logout",{});setLogin(true)}}>Выйти</Button></>}</section>
-}
-
