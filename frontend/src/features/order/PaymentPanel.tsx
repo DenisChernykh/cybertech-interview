@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import ActionDialog from "@/components/ActionDialog"
 import { api, rub, date, type Order } from "@/lib/api"
 
 const states: Record<string, string> = {
@@ -40,7 +41,8 @@ export default function PaymentPanel({
   refresh: () => void
 }) {
   const [busy, setBusy] = useState(false),
-    [error, setError] = useState("")
+    [error, setError] = useState(""),
+    [refundOpen, setRefundOpen] = useState(false)
   const mounted = useRef(true)
   useEffect(() => {
     mounted.current = true
@@ -97,15 +99,13 @@ export default function PaymentPanel({
     try {
       await api(path, body)
       refresh()
+      return true
     } catch (e) {
       setError((e as Error).message)
+      return false
     } finally {
       setBusy(false)
     }
-  }
-  async function refund() {
-    const reason = window.prompt("Причина полного возврата")
-    if (reason) await command("/manager/orders/" + order.id + "/refunds", { reason })
   }
   return (
     <div className="payment-panel">
@@ -163,7 +163,13 @@ export default function PaymentPanel({
             Проверить операции
           </Button>
           {order.actions.refund && (
-            <Button disabled={busy} onClick={refund}>
+            <Button
+              disabled={busy}
+              onClick={() => {
+                setError("")
+                setRefundOpen(true)
+              }}
+            >
               Вернуть всю оплату
             </Button>
           )}
@@ -292,6 +298,17 @@ export default function PaymentPanel({
           </Button>
         </div>
       )}
+      <ActionDialog
+        open={refundOpen}
+        onOpenChange={setRefundOpen}
+        title="Полный возврат оплаты"
+        description={`К возврату ${rub(order.total)}, включая доставку. Исполнение заказа будет отменено.`}
+        reasonLabel="Причина возврата"
+        confirmLabel="Подтвердить возврат"
+        busy={busy}
+        error={error}
+        onConfirm={(reason) => command("/manager/orders/" + order.id + "/refunds", { reason })}
+      />
     </div>
   )
 }

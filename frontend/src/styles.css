@@ -898,3 +898,44 @@ footer .brand {
 .finance-error {
   color: #a65c42;
 }
+
+.action-dialog-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background: rgb(28 44 36 / 45%);
+  backdrop-filter: blur(3px);
+}
+.action-dialog {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  z-index: 51;
+  transform: translate(-50%, -50%);
+  width: min(500px, calc(100vw - 32px));
+  max-height: calc(100dvh - 32px);
+  overflow: auto;
+  padding: 28px;
+  background: #faf9f6;
+  color: #293b31;
+  border: 1px solid #d5ddcf;
+  border-radius: 12px;
+  box-shadow: 0 24px 80px rgb(20 38 28 / 20%);
+}
+.action-dialog-title {
+  margin: 0;
+  font-size: 25px;
+  line-height: 1.25;
+}
+.action-dialog-description {
+  margin: 16px 0 24px;
+  color: #63725f;
+  line-height: 1.6;
+}
+.action-dialog-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 24px;
+}

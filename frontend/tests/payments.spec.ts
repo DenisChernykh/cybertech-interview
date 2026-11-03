@@ -44,8 +44,15 @@ async function confirm(page: Page) {
   })
 }
 async function refund(page: Page) {
-  page.once("dialog", (dialog) => dialog.accept("Полный возврат по просьбе покупателя"))
   await page.getByRole("button", { name: "Вернуть всю оплату" }).click()
+  await page
+    .getByRole("dialog")
+    .getByLabel("Причина возврата")
+    .fill("Полный возврат по просьбе покупателя")
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "Подтвердить возврат", exact: true })
+    .click()
   await expect(page.getByRole("button", { name: "Подтвердить возврат · Mock" })).toBeVisible({
     timeout: 15_000,
   })
@@ -138,8 +145,9 @@ test("canceled order plus late payment becomes refund obligation", async ({ page
   await openPayment(page)
   const buyer = await context.newPage()
   await buyer.goto(path)
-  buyer.once("dialog", (dialog) => dialog.accept("Отмена до подтверждения банка"))
   await buyer.getByRole("button", { name: "Отменить заказ" }).click()
+  await buyer.getByLabel("Причина отмены").fill("Отмена до подтверждения банка")
+  await buyer.getByRole("button", { name: "Подтвердить отмену", exact: true }).click()
   await expect(buyer.getByRole("heading", { name: "Заказ отменён" })).toBeVisible()
   await confirm(page)
   await expect(page.getByRole("heading", { name: "Заказ отменён" })).toBeVisible()
@@ -171,8 +179,8 @@ test("receipt failure blocks shipment and manager can recover it", async ({ page
   })
   await refund(page)
   await page.getByRole("button", { name: "Подтвердить возврат · Mock" }).click()
-  page.once("dialog", (dialog) => dialog.accept())
   await page.getByRole("button", { name: "Товар возвращён на полку" }).click()
+  await page.getByRole("button", { name: "Подтвердить возврат на полку", exact: true }).click()
   await expect(page.getByRole("heading", { name: "Возврат выполнен" })).toBeVisible({
     timeout: 15_000,
   })
@@ -199,7 +207,8 @@ test("another browser cannot view or pay for a buyer's order", async ({
   await other.goto("/manager")
   await expect(other.getByRole("heading", { name: "Вход для менеджера" })).toBeVisible()
   await stranger.close()
-  page.once("dialog", (dialog) => dialog.accept("Проверка доступа завершена"))
   await page.getByRole("button", { name: "Отменить заказ" }).click()
+  await page.getByLabel("Причина отмены").fill("Проверка доступа завершена")
+  await page.getByRole("button", { name: "Подтвердить отмену", exact: true }).click()
   await expect(page.getByRole("heading", { name: "Заказ отменён" })).toBeVisible()
 })

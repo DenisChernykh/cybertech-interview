@@ -3,6 +3,7 @@ import { Link, useParams } from "react-router-dom"
 import { ArrowLeft, Check } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Notice, Loading, Tag } from "@/components/feedback"
+import ActionDialog from "@/components/ActionDialog"
 import PaymentPanel from "./PaymentPanel"
 import { api, rub, date, statusName, type Order } from "@/lib/api"
 
@@ -10,7 +11,8 @@ export default function OrderPage({ manager = false }: { manager?: boolean }) {
   const { id } = useParams(),
     [order, setOrder] = useState<Order | null>(null),
     [error, setError] = useState(""),
-    [busy, setBusy] = useState(false)
+    [busy, setBusy] = useState(false),
+    [confirmation, setConfirmation] = useState<"cancel" | "release-stock" | null>(null)
   const path = (manager ? "/manager" : "") + "/orders/" + id
   const refresh = useCallback(
     () =>
@@ -27,21 +29,15 @@ export default function OrderPage({ manager = false }: { manager?: boolean }) {
     const timer = setInterval(refresh, 4000)
     return () => clearInterval(timer)
   }, [refresh])
-  async function action(name: string) {
-    let body: unknown = {}
-    if (name === "cancel") {
-      const reason = window.prompt("Причина отмены")
-      if (!reason) return
-      body = { reason }
-    }
-    if (name === "release-stock" && !window.confirm("Все товары заказа возвращены на полку?"))
-      return
+  async function action(name: string, body: unknown = {}) {
     setBusy(true)
     setError("")
     try {
       setOrder(await api<Order>(path + "/" + name, body))
+      return true
     } catch (e) {
       setError((e as Error).message)
+      return false
     } finally {
       setBusy(false)
     }
@@ -129,16 +125,50 @@ export default function OrderPage({ manager = false }: { manager?: boolean }) {
                   </Button>
                 )}
                 {manager && order.actions.release_stock && (
-                  <Button disabled={busy} onClick={() => action("release-stock")}>
+                  <Button
+                    disabled={busy}
+                    onClick={() => {
+                      setError("")
+                      setConfirmation("release-stock")
+                    }}
+                  >
                     Товар возвращён на полку
                   </Button>
                 )}
                 {order.actions.cancel && (
-                  <Button variant="outline" disabled={busy} onClick={() => action("cancel")}>
+                  <Button
+                    variant="outline"
+                    disabled={busy}
+                    onClick={() => {
+                      setError("")
+                      setConfirmation("cancel")
+                    }}
+                  >
                     Отменить заказ
                   </Button>
                 )}
               </div>
+              <ActionDialog
+                open={confirmation !== null}
+                onOpenChange={(open) => {
+                  if (!open) setConfirmation(null)
+                }}
+                title={confirmation === "cancel" ? "Отмена заказа" : "Возвращение товара на полку"}
+                description={
+                  confirmation === "cancel"
+                    ? "Исполнение заказа будет отменено. Если оплата уже получена, её возврат контролируется отдельно."
+                    : "Подтвердите, что все товары этого заказа физически возвращены на полку. После этого они снова будут доступны для продажи."
+                }
+                reasonLabel={confirmation === "cancel" ? "Причина отмены" : undefined}
+                confirmLabel={
+                  confirmation === "cancel" ? "Подтвердить отмену" : "Подтвердить возврат на полку"
+                }
+                busy={busy}
+                error={error}
+                onConfirm={(reason) =>
+                  action(confirmation!, confirmation === "cancel" ? { reason } : {})
+                }
+              />
             </div>
             <aside className="summary">
               <p className="eyebrow">Состав заказа</p>
