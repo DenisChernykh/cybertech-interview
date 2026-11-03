@@ -7,8 +7,9 @@ import pytest
 from conftest import payload
 from sqlalchemy import func, select
 
+from app.core.config import settings
 from app.core.db import SessionLocal
-from app.integrations.payments.base import ProviderUncertain
+from app.integrations.payments.base import ProviderRejected, ProviderUncertain
 from app.integrations.payments.mock import MockPaymentProvider
 from app.models import OperationEvent, Order, Product, Reservation
 from app.models.payments import (
@@ -19,11 +20,18 @@ from app.models.payments import (
     Receipt,
     Refund,
     RefundAttempt,
+    Webhook,
 )
 from app.models.store import now
 from app.repositories.store import get_order
 from app.services import payments as business
-from app.services.processing import accept_webhook, process_operation, tick
+from app.services.processing import (
+    accept_webhook,
+    process_operation,
+    process_webhooks,
+    reconcile,
+    tick,
+)
 
 
 def order_and_payment(client):
@@ -296,3 +304,105 @@ def test_no_new_post_after_idempotency_window(client, db, monkeypatch):
     process_operation(Payment, p.id, True)
     db.expire_all()
     assert db.get(Payment, p.id).state == "blocked"
+
+
+def test_api_verified_webhook_ignores_forged_body_and_deduplicates(client, db, monkeypatch):
+    order = order_and_payment(client)
+    payment = db.get(Payment, order["payments"][0]["id"])
+    external_id = payment.provider_id
+    payment.provider = "yookassa_test"
+    db.commit()
+    monkeypatch.setattr(settings(), "payment_provider", "yookassa_test")
+    monkeypatch.setattr(settings(), "yookassa_shop_id", "mock-shop")
+
+    # Only the transport is replaced: webhook HTTP, durable inbox and verification run normally.
+    class VerifiedGateway(MockPaymentProvider):
+        def get(self, kind, object_id):
+            raw = super().get(kind, object_id)
+            raw["confirmation"] = {"confirmation_url": "https://yoomoney.ru/checkout/payments/test"}
+            return raw
+
+    monkeypatch.setattr("app.services.processing.provider", lambda name: VerifiedGateway())
+    notification = {
+        "type": "notification",
+        "event": "payment.succeeded",
+        "object": {"id": external_id, "status": "succeeded", "paid": True},
+    }
+    for _ in range(3):
+        assert client.post("/api/webhooks/yookassa", json=notification).status_code == 200
+    assert db.scalar(select(func.count()).select_from(Webhook)) == 1
+    process_webhooks()
+    db.expire_all()
+    assert db.get(Order, order["id"]).accepted_payment_id is None
+    assert db.get(Payment, payment.id).provider_status == "pending"
+    # An out-of-order notification also cannot overwrite the status fetched from the API.
+    MockPaymentProvider().decide(external_id, "succeeded")
+    notification["event"] = "payment.canceled"
+    assert client.post("/api/webhooks/yookassa", json=notification).status_code == 200
+    process_webhooks()
+    db.expire_all()
+    assert db.get(Order, order["id"]).accepted_payment_id == payment.id
+    assert (
+        client.post("/api/demo/payments/" + external_id, json={"outcome": "canceled"}).status_code
+        == 404
+    )
+
+
+def test_reservation_expires_during_provider_outage_and_late_money_is_refunded(
+    client, db, monkeypatch
+):
+    order = order_and_payment(client)
+    p = order["payments"][0]
+    db.get(Reservation, order["id"]).expires_at = now() - timedelta(minutes=1)
+    db.commit()
+    original = MockPaymentProvider.get
+
+    def offline(*args):
+        raise ProviderUncertain("provider_unavailable")
+
+    monkeypatch.setattr(MockPaymentProvider, "get", offline)
+    tick(force=True, mail=False)
+    db.expire_all()
+    assert db.get(Order, order["id"]).status == "canceled"
+    assert db.get(Product, 1).reserved == 0
+    monkeypatch.setattr(MockPaymentProvider, "get", original)
+    MockPaymentProvider().decide(p["provider_id"], "succeeded")
+    tick(force=True, mail=False)
+    db.expire_all()
+    assert db.get(Order, order["id"]).status == "canceled"
+    assert db.scalar(select(Refund)).status in ("requested", "processing")
+
+
+def test_scan_recovers_missing_payment_id_after_idempotency_window(client, db):
+    order = client.post("/api/orders", json=payload(client)).json()
+    client.post("/api/orders/" + order["id"] + "/payments", json={})
+    payment = db.scalar(select(Payment))
+    raw = MockPaymentProvider().create("payments", payment.request, payment.idempotency_key)
+    payment.sent_at = now() - timedelta(hours=25)
+    db.commit()
+    process_operation(Payment, payment.id, True)
+    reconcile(force=True)
+    db.expire_all()
+    assert db.get(Payment, payment.id).provider_id == raw["id"]
+    assert db.get(Payment, payment.id).state == "known"
+    assert db.scalar(select(Issue).where(Issue.key == "payments:" + payment.id)).resolved
+
+
+def test_auth_error_on_retry_cannot_erase_an_earlier_unknown_payment(client, db, monkeypatch):
+    order = client.post("/api/orders", json=payload(client)).json()
+    client.post("/api/orders/" + order["id"] + "/payments", json={})
+    payment = db.scalar(select(Payment))
+    payment.sent_at = now() - timedelta(minutes=1)
+    payment.state = "unknown"
+    db.commit()
+
+    def unauthorized(*args):
+        raise ProviderRejected("invalid_credentials")
+
+    monkeypatch.setattr(MockPaymentProvider, "create", unauthorized)
+    process_operation(Payment, payment.id, True)
+    db.expire_all()
+    assert db.get(Payment, payment.id).state == "unknown"
+    assert db.get(Payment, payment.id).active
+    client.post("/api/orders/" + order["id"] + "/payments", json={})
+    assert db.scalar(select(func.count()).select_from(Payment)) == 1

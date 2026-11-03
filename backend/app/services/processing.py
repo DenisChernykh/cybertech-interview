@@ -56,6 +56,7 @@ def process_operation(model, object_id, force=False):
             return
         if op.state == "rejected" or (op.provider_status == "canceled"):
             return
+        already_sent = op.sent_at is not None
         if not op.provider_id:
             if op.sent_at and now() - op.sent_at >= timedelta(hours=23, minutes=55):
                 op.state = "blocked"
@@ -111,7 +112,9 @@ def process_operation(model, object_id, force=False):
             op = db.get(model, object_id)
             refund = db.get(Refund, op.refund_id) if model is RefundAttempt else None
             order_id = refund.order_id if refund else op.order_id
-            rejected = isinstance(exc, ProviderRejected) and not external_id
+            # A refusal on a retry (for example expired credentials) says nothing
+            # about the first request whose response was lost.
+            rejected = isinstance(exc, ProviderRejected) and not external_id and not already_sent
             op.state = "rejected" if rejected else "unknown"
             if rejected:
                 op.active = False

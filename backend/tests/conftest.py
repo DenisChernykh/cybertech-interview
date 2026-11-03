@@ -4,6 +4,7 @@ os.environ["DATABASE_URL"] = os.environ.get(
     "TEST_DATABASE_URL", "postgresql+psycopg://shop:local-demo-only@localhost:55439/shop_test"
 )
 os.environ["MANAGER_PASSWORD"] = "test-manager-pass"
+os.environ["PAYMENT_PROVIDER"] = "mock"
 os.environ["TRUSTED_ORIGINS"] = "http://testserver,http://localhost:5173,http://localhost:8080"
 import pytest
 from fastapi.testclient import TestClient

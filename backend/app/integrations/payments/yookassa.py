@@ -55,12 +55,17 @@ class YooKassaProvider:
         return payload
 
     def _verify(self, kind, raw):
-        if not isinstance(raw.get("id"), str) or not isinstance(raw.get("status"), str):
+        if (
+            not isinstance(raw, dict)
+            or not isinstance(raw.get("id"), str)
+            or not isinstance(raw.get("status"), str)
+        ):
             raise ProviderUncertain("missing_object_fields")
         if kind == "payments":
             if raw.get("test") is not True:
                 raise ProviderUncertain("non_test_payment_blocked")
-            if str(raw.get("recipient", {}).get("account_id")) != self.shop_id:
+            recipient = raw.get("recipient")
+            if not isinstance(recipient, dict) or str(recipient.get("account_id")) != self.shop_id:
                 raise ProviderUncertain("wrong_shop")
         return raw
 
