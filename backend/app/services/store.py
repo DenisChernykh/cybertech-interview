@@ -98,6 +98,7 @@ def create_order(db, payload, owner):
                 name=product.name,
                 price=product.price,
                 quantity=line["quantity"],
+                vat_code=settings().receipt_vat_code,
             )
         )
         product.reserved += line["quantity"]
@@ -135,18 +136,27 @@ def cancel(db, order, reason, actor):
     order.status = "canceled"
     order.cancel_reason = reason
     event(db, order, "order_canceled", actor, reason=reason)
+    from app.services.payments import refund_after_cancel
+
+    refund_after_cancel(db, order, actor)
     return order
 
 
 def transition(db, order, action):
     reservation = db.get(Reservation, order.id)
     if action == "start-packing":
+        from app.services.payments import ensure_can_fulfill
+
+        ensure_can_fulfill(db, order)
         if order.status != "placed":
             raise BusinessError("invalid_transition", "Заказ нельзя передать в комплектацию")
-        if reservation.expires_at <= now():
+        if reservation.status == "held" and reservation.expires_at <= now():
             raise BusinessError("reservation_expired", "Срок резерва истёк")
         order.status, reservation.status = "packing", "allocated"
     elif action == "ship":
+        from app.services.payments import ensure_can_fulfill
+
+        ensure_can_fulfill(db, order, shipping=True)
         if order.status != "packing":
             raise BusinessError("invalid_transition", "Сначала начните комплектацию")
         change_stock(db, order, consume=True)
@@ -155,6 +165,11 @@ def transition(db, order, action):
         if order.status != "shipped":
             raise BusinessError("invalid_transition", "Заказ ещё не передан в доставку")
         order.status = "completed"
+        if order.accepted_payment_id:
+            from app.models.payments import Payment
+            from app.services.payments import ensure_receipt
+
+            ensure_receipt(db, order, db.get(Payment, order.accepted_payment_id), "final")
     elif action == "release-stock":
         if reservation.status != "release_pending":
             raise BusinessError("invalid_transition", "Нет товара, ожидающего возвращения на полку")
@@ -229,4 +244,9 @@ def order_view(db, order, manager=False):
                 .order_by(OperationEvent.id)
             )
         ]
+    from app.services.payments import order_finances
+
+    finances = order_finances(db, order, manager)
+    data["actions"].update(finances.pop("actions"))
+    data.update(finances)
     return data

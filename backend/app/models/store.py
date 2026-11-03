@@ -68,6 +68,12 @@ class Order(Base):
     total: Mapped[Decimal] = mapped_column(Numeric(12, 2))
     status: Mapped[str] = mapped_column(String(30), default="placed")
     cancel_reason: Mapped[str | None] = mapped_column(String(500))
+    payment_policy: Mapped[str] = mapped_column(
+        String(20), default="online", server_default="online"
+    )
+    accepted_payment_id: Mapped[str | None] = mapped_column(
+        ForeignKey("payments.id", use_alter=True, name="fk_order_accepted_payment")
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
 
 
@@ -81,6 +87,7 @@ class OrderItem(Base):
     price: Mapped[Decimal] = mapped_column(Numeric(12, 2))
     quantity: Mapped[int]
     discount: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=Decimal(0))
+    vat_code: Mapped[int] = mapped_column(default=1, server_default="1")
 
 
 class Reservation(Base):

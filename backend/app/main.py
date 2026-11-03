@@ -2,6 +2,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
+from app.api.payments import router as payment_router
 from app.api.store import router
 from app.core.config import settings
 from app.core.db import SessionLocal
@@ -35,4 +36,5 @@ def health():
     return {"status": "ok"}
 
 
+app.include_router(payment_router)
 app.include_router(router)

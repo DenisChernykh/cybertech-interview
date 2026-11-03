@@ -90,6 +90,9 @@ def test_cancel_releases_once_and_access(client, db):
 
 def test_manual_fulfillment_and_return_to_shelf(client, db):
     order = client.post("/api/orders", json=payload(client)).json()
+    # Existing orders retain the pre-integration manager workflow.
+    db.get(Order, order["id"]).payment_policy = "manual"
+    db.commit()
     assert (
         client.post("/api/manager/login", json={"password": "test-manager-pass"}).status_code == 200
     )

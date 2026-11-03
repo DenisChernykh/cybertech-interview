@@ -1,13 +1,7 @@
 import logging
 import time
 
-from app.core.db import SessionLocal
-from app.services.store import expire_reservations
-
-
-def tick():
-    with SessionLocal.begin() as db:
-        expire_reservations(db)
+from app.services.processing import tick
 
 
 def main():
