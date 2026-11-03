@@ -256,6 +256,8 @@ def refund_after_cancel(db, order, actor="system"):
 
 def retry_refund(db, refund):
     order = get_order(db, refund.order_id, True)
+    # The API may have read the refund before waiting for the order lock.
+    db.refresh(refund)
     if refund.status != "needs_attention" or db.scalar(
         select(RefundAttempt).where(RefundAttempt.refund_id == refund.id, RefundAttempt.active)
     ):

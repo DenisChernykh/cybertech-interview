@@ -9,6 +9,7 @@ from sqlalchemy import func, select
 
 from app.core.config import settings
 from app.core.db import SessionLocal
+from app.core.errors import BusinessError
 from app.integrations.payments.base import ProviderRejected, ProviderUncertain
 from app.integrations.payments.mock import MockPaymentProvider
 from app.models import OperationEvent, Order, Product, Reservation
@@ -207,46 +208,60 @@ def test_paid_customer_cancel_requires_manager_approval(client, db):
 
 
 def test_refund_failure_retry_and_no_regression_from_old_attempt(client, db):
-    order = settle(client)
-    manager(client)
-    path = "/api/manager/orders/" + order["id"] + "/refunds"
-    first = client.post(path, json={"reason": "Отмена согласована"})
-    assert first.status_code == 202, first.text
-    assert (
-        client.post(path, json={"reason": "Повторный клик"}).json()["refund_id"]
-        == first.json()["refund_id"]
-    )
-    tick(force=True, mail=False)
-    attempt = db.scalar(select(RefundAttempt))
-    MockPaymentProvider().decide(attempt.provider_id, "canceled")
-    tick(force=True, mail=False)
-    db.expire_all()
-    refund = db.scalar(select(Refund))
-    assert refund.status == "needs_attention"
-    assert (
-        db.scalar(select(Issue).where(Issue.key == "refund:" + refund.id)).code == "refund_failed"
-    )
-    assert db.get(Payment, order["payments"][0]["id"]).refunded_amount == 0
-    retry = client.post("/api/manager/refunds/" + refund.id + "/retry", json={})
-    assert retry.status_code == 202, retry.text
-    tick(force=True, mail=False)
-    db.expire_all()
-    attempts = list(db.scalars(select(RefundAttempt).order_by(RefundAttempt.created_at)))
-    assert attempts[0].idempotency_key != attempts[1].idempotency_key
-    MockPaymentProvider().decide(attempts[1].provider_id, "succeeded")
-    tick(force=True, mail=False)
-    tick(force=True, mail=False)
-    db.expire_all()
-    assert db.get(Refund, refund.id).status == "succeeded"
-    assert db.get(Payment, order["payments"][0]["id"]).refunded_amount == Decimal(order["total"])
-    assert db.scalar(select(func.count()).select_from(Receipt).where(Receipt.kind == "refund")) == 1
-    # A stale payment snapshot cannot erase the confirmed returned amount.
-    raw = MockPaymentProvider().get("payments", order["payments"][0]["provider_id"])
-    raw["refunded_amount"] = {"value": "0.00", "currency": "RUB"}
-    with SessionLocal.begin() as s:
-        business.apply_payment(s, order["payments"][0]["id"], raw)
-    db.expire_all()
-    assert db.get(Payment, order["payments"][0]["id"]).refunded_amount == Decimal(order["total"])
+    with SessionLocal() as stale_db:
+        order = settle(client)
+        manager(client)
+        path = "/api/manager/orders/" + order["id"] + "/refunds"
+        first = client.post(path, json={"reason": "Отмена согласована"})
+        assert first.status_code == 202, first.text
+        assert (
+            client.post(path, json={"reason": "Повторный клик"}).json()["refund_id"]
+            == first.json()["refund_id"]
+        )
+        tick(force=True, mail=False)
+        attempt = db.scalar(select(RefundAttempt))
+        MockPaymentProvider().decide(attempt.provider_id, "canceled")
+        tick(force=True, mail=False)
+        db.expire_all()
+        refund = db.scalar(select(Refund))
+        assert refund.status == "needs_attention"
+        stale_refund = stale_db.get(Refund, refund.id)
+        assert (
+            db.scalar(select(Issue).where(Issue.key == "refund:" + refund.id)).code
+            == "refund_failed"
+        )
+        assert db.get(Payment, order["payments"][0]["id"]).refunded_amount == 0
+        retry = client.post("/api/manager/refunds/" + refund.id + "/retry", json={})
+        assert retry.status_code == 202, retry.text
+        tick(force=True, mail=False)
+        db.expire_all()
+        attempts = list(db.scalars(select(RefundAttempt).order_by(RefundAttempt.created_at)))
+        assert attempts[0].idempotency_key != attempts[1].idempotency_key
+        MockPaymentProvider().decide(attempts[1].provider_id, "succeeded")
+        tick(force=True, mail=False)
+        tick(force=True, mail=False)
+        db.expire_all()
+        assert db.get(Refund, refund.id).status == "succeeded"
+        assert db.get(Payment, order["payments"][0]["id"]).refunded_amount == Decimal(
+            order["total"]
+        )
+        assert (
+            db.scalar(select(func.count()).select_from(Receipt).where(Receipt.kind == "refund"))
+            == 1
+        )
+        # A stale payment snapshot cannot erase the confirmed returned amount.
+        raw = MockPaymentProvider().get("payments", order["payments"][0]["provider_id"])
+        raw["refunded_amount"] = {"value": "0.00", "currency": "RUB"}
+        with SessionLocal.begin() as s:
+            business.apply_payment(s, order["payments"][0]["id"], raw)
+        db.expire_all()
+        assert db.get(Payment, order["payments"][0]["id"]).refunded_amount == Decimal(
+            order["total"]
+        )
+
+        # A request that read an old status before waiting on the lock must refresh it.
+        with pytest.raises(BusinessError):
+            business.retry_refund(stale_db, stale_refund)
 
 
 def test_receipt_error_blocks_shipping_until_verified_recovery(client, db):
