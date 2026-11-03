@@ -4,7 +4,7 @@
 
 ## Текущий этап
 
-Базовая версия сохранена как `store-v0`. Следующим этапом добавлены серверные платежные сущности, MockPaymentProvider, сверка, возвраты, состояния чеков и восстанавливаемый обработчик. 19 тестов backend проходят. HTTP-адаптер ЮKassa и платёжные экраны добавляются следующим этапом; пока основной UI остаётся базовым.
+Базовая версия сохранена как `store-v0`. Следующим этапом добавлены серверные платежные сущности, MockPaymentProvider, сверка, возвраты, состояния чеков и восстанавливаемый обработчик. 19 тестов backend проходят. HTTP-адаптер ЮKassa добавлен отдельно: контрактные проверки запросов, ошибок и пагинации проходят. Внешние операции ЮKassa не проверялись: реквизиты не предоставлены. Платёжные экраны добавляются следующим этапом.
 
 ## Запуск
 
@@ -15,7 +15,7 @@ docker compose up --build -d
 
 Магазин: http://localhost:8080, менеджер: http://localhost:8080/manager. Пароль менеджера создаётся в локальном `.env` (MANAGER_PASSWORD). Почта: http://localhost:8026. Не публикуйте `.env`.
 
-Локальная разработка: запустите `docker compose up -d db mail`, затем в `backend` выполните `uv sync`, `uv run alembic upgrade head`, `uv run python -m app.seed`, `uv run uvicorn app.main:app --port 8019`. В другом терминале запустите `uv run python -m app.worker`. В `frontend`: `pnpm install`, `pnpm dev`. Интерфейс: http://localhost:5179. Node 24.18.1, pnpm 11.15.1, Python 3.13.
+Локальная разработка: запустите `docker compose up -d db mail`, затем в `backend` выполните `uv sync`, `uv run alembic upgrade head`, `uv run python -m app.seed`, `uv run uvicorn app.main:app --port 8019`. В другом терминале запустите `uv run python -m app.worker`. В `frontend`: `pnpm install`, `pnpm dev`. Интерфейс: http://localhost:5179. Node 24 (>=24.18.0), pnpm 11.15.1, Python 3.13.
 
 ## Проверки базовой версии
 

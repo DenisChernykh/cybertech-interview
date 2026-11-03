@@ -215,6 +215,9 @@ def test_refund_failure_retry_and_no_regression_from_old_attempt(client, db):
     db.expire_all()
     refund = db.scalar(select(Refund))
     assert refund.status == "needs_attention"
+    assert (
+        db.scalar(select(Issue).where(Issue.key == "refund:" + refund.id)).code == "refund_failed"
+    )
     assert db.get(Payment, order["payments"][0]["id"]).refunded_amount == 0
     retry = client.post("/api/manager/refunds/" + refund.id + "/retry", json={})
     assert retry.status_code == 202, retry.text
@@ -229,6 +232,13 @@ def test_refund_failure_retry_and_no_regression_from_old_attempt(client, db):
     assert db.get(Refund, refund.id).status == "succeeded"
     assert db.get(Payment, order["payments"][0]["id"]).refunded_amount == Decimal(order["total"])
     assert db.scalar(select(func.count()).select_from(Receipt).where(Receipt.kind == "refund")) == 1
+    # A stale payment snapshot cannot erase the confirmed returned amount.
+    raw = MockPaymentProvider().get("payments", order["payments"][0]["provider_id"])
+    raw["refunded_amount"] = {"value": "0.00", "currency": "RUB"}
+    with SessionLocal.begin() as s:
+        business.apply_payment(s, order["payments"][0]["id"], raw)
+    db.expire_all()
+    assert db.get(Payment, order["payments"][0]["id"]).refunded_amount == Decimal(order["total"])
 
 
 def test_receipt_error_blocks_shipping_until_verified_recovery(client, db):

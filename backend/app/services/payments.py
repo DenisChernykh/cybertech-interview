@@ -29,7 +29,7 @@ def issue(db, key, code, message, order_id=None):
         )
         .on_conflict_do_update(
             index_elements=["key"],
-            set_={"message": message, "resolved": False, "updated_at": now()},
+            set_={"code": code, "message": message, "resolved": False, "updated_at": now()},
         )
     )
 
@@ -91,6 +91,8 @@ def prepare_payment(db, order):
     existing = db.scalar(select(Payment).where(Payment.order_id == order.id, Payment.active))
     if existing:
         return existing
+    if db.scalar(select(Payment).where(Payment.order_id == order.id, Payment.state == "blocked")):
+        raise BusinessError("payment_review", "Сначала менеджер должен проверить предыдущую оплату")
     payment = Payment(
         id=uid(), order_id=order.id, provider=settings().payment_provider, amount=order.total
     )
@@ -339,6 +341,8 @@ def apply_payment(db, payment_id, raw):
             order.id,
         )
         return
+    # A delayed payment snapshot must not undo an already confirmed refund.
+    refunded = max(refunded, payment.refunded_amount)
     payment.refunded_amount = refunded
     url = raw.get("confirmation", {}).get("confirmation_url")
     if url:
@@ -360,6 +364,7 @@ def apply_payment(db, payment_id, raw):
             )
             return
     resolve(db, "payment:" + payment.id)
+    resolve(db, "payments:" + payment.id)
     if raw["status"] == "succeeded":
         ensure_receipt(db, order, payment, "prepayment", raw.get("receipt_registration", "pending"))
         known_refund = db.scalar(
@@ -442,6 +447,8 @@ def apply_refund(db, attempt_id, raw):
     attempt.state, attempt.last_checked_at = "known", now()
     attempt.next_check_at = now() + timedelta(seconds=settings().reconciliation_seconds)
     attempt.active = raw["status"] == "pending"
+    resolve(db, "refunds:" + attempt.id)
+    resolve(db, "unmatched-refund:" + attempt.provider + ":" + raw["id"])
     latest_id = db.scalar(
         select(RefundAttempt.id)
         .where(RefundAttempt.refund_id == refund.id)
@@ -485,6 +492,14 @@ def apply_refund(db, attempt_id, raw):
 def can_fulfill(db, order):
     if order.payment_policy == "manual":
         return True
+    if db.scalar(
+        select(Issue).where(
+            Issue.order_id == order.id,
+            ~Issue.resolved,
+            Issue.code.in_(["external_refund", "payment_mismatch"]),
+        )
+    ):
+        return False
     payment = db.get(Payment, order.accepted_payment_id) if order.accepted_payment_id else None
     return bool(
         payment
@@ -562,6 +577,7 @@ def order_finances(db, order, manager=False):
     accepted = db.get(Payment, order.accepted_payment_id) if order.accepted_payment_id else None
     return {
         "payment_policy": order.payment_policy,
+        "accepted_payment_id": order.accepted_payment_id,
         "provider": settings().payment_provider,
         "payments": [
             {
@@ -591,6 +607,7 @@ def order_finances(db, order, manager=False):
         ],
         "actions": {
             "pay": order.payment_policy == "online"
+            and not any(p.state == "blocked" for p in payments)
             and order.status == "placed"
             and reservation.status == "held"
             and reservation.expires_at > now()

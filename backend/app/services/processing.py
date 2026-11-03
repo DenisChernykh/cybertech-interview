@@ -99,7 +99,14 @@ def process_operation(model, object_id, force=False):
                 db, object_id, raw
             )
             business.resolve(db, kind + ":" + object_id)
-    except (ProviderUncertain, ProviderRejected, ValueError, KeyError) as exc:
+    except (
+        ProviderUncertain,
+        ProviderRejected,
+        ValueError,
+        KeyError,
+        TypeError,
+        ArithmeticError,
+    ) as exc:
         with SessionLocal.begin() as db:
             op = db.get(model, object_id)
             refund = db.get(Refund, op.refund_id) if model is RefundAttempt else None
@@ -183,7 +190,14 @@ def process_webhooks():
             with SessionLocal.begin() as db:
                 (attach_payment if kind == "payments" else attach_refund)(db, name, raw)
                 db.get(Webhook, object_id).processed = True
-        except (ProviderUncertain, ProviderRejected, ValueError, KeyError) as exc:
+        except (
+            ProviderUncertain,
+            ProviderRejected,
+            ValueError,
+            KeyError,
+            TypeError,
+            ArithmeticError,
+        ) as exc:
             with SessionLocal.begin() as db:
                 item = db.get(Webhook, object_id)
                 item.attempts += 1
@@ -325,7 +339,14 @@ def process_receipts(force=False):
                         r.last_error + ". Проверьте кассовый сервис.",
                         r.order_id,
                     )
-        except (ProviderRejected, ProviderUncertain, ValueError, KeyError) as exc:
+        except (
+            ProviderRejected,
+            ProviderUncertain,
+            ValueError,
+            KeyError,
+            TypeError,
+            ArithmeticError,
+        ) as exc:
             with SessionLocal.begin() as db:
                 r = db.get(Receipt, receipt_id)
                 r.last_error = str(exc)[:500]

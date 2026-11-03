@@ -6,7 +6,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file="../.env", extra="ignore")
+    model_config = SettingsConfigDict(env_file="../.env", extra="ignore", hide_input_in_errors=True)
     database_url: str = "postgresql+psycopg://shop:local-demo-only@localhost:55439/shop"
     manager_password: str = ""
     public_url: str = "http://localhost:8080"
