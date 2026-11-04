@@ -1,5 +1,5 @@
 from concurrent.futures import ThreadPoolExecutor
-from datetime import timedelta
+from datetime import datetime, timedelta
 from decimal import Decimal
 from smtplib import SMTPException
 from threading import Barrier
@@ -462,6 +462,51 @@ def test_scan_recovers_missing_payment_id_after_idempotency_window(client, db):
     assert db.get(Payment, payment.id).provider_id == raw["id"]
     assert db.get(Payment, payment.id).state == "known"
     assert db.scalar(select(Issue).where(Issue.key == "payments:" + payment.id)).resolved
+
+
+def test_new_environment_history_boundary_keeps_known_older_operations(client, db, monkeypatch):
+    boundary = now() - timedelta(minutes=1)
+    monkeypatch.setattr(settings(), "payment_provider", "yookassa_test")
+    monkeypatch.setattr(settings(), "yookassa_shop_id", "mock-shop")
+    monkeypatch.setattr(settings(), "yookassa_history_start", boundary)
+
+    class Gateway:
+        objects = [
+            {
+                "id": "another-environment",
+                "status": "succeeded",
+                "created_at": (boundary - timedelta(hours=2)).isoformat(),
+            }
+        ]
+
+        def list(self, kind, since):
+            if kind == "refunds":
+                return []
+            return [
+                item
+                for item in self.objects
+                if datetime.fromisoformat(item["created_at"]) >= datetime.fromisoformat(since)
+            ]
+
+    gateway = Gateway()
+    monkeypatch.setattr("app.services.processing.provider", lambda name: gateway)
+    reconcile(force=True)
+    assert db.scalar(select(func.count()).select_from(Issue)) == 0
+
+    order = client.post("/api/orders", json=payload(client)).json()
+    client.post("/api/orders/" + order["id"] + "/payments", json={})
+    payment = db.scalar(select(Payment))
+    payment.created_at = boundary - timedelta(minutes=10)
+    db.commit()
+    raw = MockPaymentProvider().create("payments", payment.request, payment.idempotency_key)
+    raw["created_at"] = (boundary - timedelta(minutes=5)).isoformat()
+    raw["confirmation"] = {"confirmation_url": "https://yoomoney.ru/test-confirmation"}
+    gateway.objects.append(raw)
+    reconcile(force=True)
+    db.expire_all()
+    assert db.get(Payment, payment.id).provider_id == raw["id"]
+    assert db.get(Payment, payment.id).state == "known"
+    assert db.scalar(select(func.count()).select_from(Issue)) == 0
 
 
 def test_auth_error_on_retry_cannot_erase_an_earlier_unknown_payment(client, db, monkeypatch):

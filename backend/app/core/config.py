@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from functools import lru_cache
 from typing import Literal
 
@@ -19,12 +20,18 @@ class Settings(BaseSettings):
     payment_provider: Literal["mock", "yookassa_test"] = "mock"
     yookassa_shop_id: str = ""
     yookassa_secret_key: str = ""
+    yookassa_history_start: datetime | None = None
     receipt_vat_code: int = 1
     reconciliation_seconds: int = 60
     provider_timeout_seconds: float = 10
 
     @model_validator(mode="after")
     def test_only(self):
+        if self.yookassa_history_start is not None:
+            if self.yookassa_history_start.utcoffset() is None:
+                raise ValueError("YooKassa history start requires a timezone")
+            if self.yookassa_history_start > datetime.now(timezone.utc):
+                raise ValueError("YooKassa history start cannot be in the future")
         if self.payment_provider == "yookassa_test":
             if not self.yookassa_shop_id or not self.yookassa_secret_key.startswith("test_"):
                 raise ValueError("Only YooKassa test_ credentials are allowed")

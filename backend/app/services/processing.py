@@ -230,7 +230,7 @@ def reconcile(force=False):
         earliest = db.scalar(
             select(Payment.created_at).where(Payment.active).order_by(Payment.created_at).limit(1)
         )
-        since = min(now() - timedelta(days=2), earliest or now()).isoformat()
+        since = min(now() - timedelta(days=2), earliest or now())
     checked = 0
     try:
         # Separate provider ledgers may remain after configuration changes.
@@ -239,8 +239,21 @@ def reconcile(force=False):
                 settings().payment_provider
             }
         for name in names:
+            provider_since = since
+            history_start = settings().yookassa_history_start
+            if name == "yookassa_test" and history_start is not None:
+                with SessionLocal() as db:
+                    first_local = db.scalar(
+                        select(Payment.created_at)
+                        .where(Payment.provider == name)
+                        .order_by(Payment.created_at)
+                        .limit(1)
+                    )
+                # A fresh environment may share a test shop with local development.
+                # Never let its cutover hide an operation already known to this DB.
+                provider_since = max(since, min(history_start, first_local or history_start))
             for kind, apply in (("payments", attach_payment), ("refunds", attach_refund)):
-                for raw in provider(name).list(kind, since):
+                for raw in provider(name).list(kind, provider_since.isoformat()):
                     with SessionLocal.begin() as db:
                         apply(db, name, raw)
                     checked += 1
