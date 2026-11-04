@@ -1,0 +1,60 @@
+name: Deploy demo
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cybertech-demo-deploy
+  cancel-in-progress: false
+
+jobs:
+  checks:
+    if: github.ref == 'refs/heads/main'
+    uses: ./.github/workflows/ci.yml
+
+  deploy:
+    needs: checks
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.18.0'
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.15.1
+          run_install: false
+      - name: Build frontend
+        working-directory: frontend
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm build
+      - name: Prepare release
+        run: tar -czf release.tar.gz backend frontend/dist deploy/activate-release.sh
+      - name: Configure SSH
+        env:
+          DEPLOY_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          test -n "$DEPLOY_KEY" && test -n "$DEPLOY_KNOWN_HOSTS"
+          mkdir -p "$HOME/.ssh"
+          chmod 700 "$HOME/.ssh"
+          printf '%s\n' "$DEPLOY_KEY" > "$HOME/.ssh/cybertech_deploy"
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/cybertech_deploy" "$HOME/.ssh/known_hosts"
+      - name: Upload and activate release
+        env:
+          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ vars.DEPLOY_USER }}
+          RELEASE_ID: ${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+        run: |
+          set -eu
+          case "$DEPLOY_HOST" in ''|*[!A-Za-z0-9.-]*) exit 1;; esac
+          case "$DEPLOY_USER" in ''|*[!a-z0-9_-]*) exit 1;; esac
+          scp -i "$HOME/.ssh/cybertech_deploy" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes release.tar.gz "$DEPLOY_USER@$DEPLOY_HOST:/srv/cybertech/incoming/$RELEASE_ID.tar.gz"
+          ssh -i "$HOME/.ssh/cybertech_deploy" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes "$DEPLOY_USER@$DEPLOY_HOST" "mkdir -p /srv/cybertech/incoming/$RELEASE_ID && tar -xzf /srv/cybertech/incoming/$RELEASE_ID.tar.gz -C /srv/cybertech/incoming/$RELEASE_ID && bash /srv/cybertech/incoming/$RELEASE_ID/deploy/activate-release.sh $RELEASE_ID"

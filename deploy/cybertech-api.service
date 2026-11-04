@@ -1,0 +1,18 @@
+[Unit]
+Description=Cybertech demo API
+After=network.target postgresql.service
+
+[Service]
+Type=simple
+User=cybertech
+Group=cybertech
+WorkingDirectory=/srv/cybertech/current/backend
+EnvironmentFile=/srv/cybertech/shared/demo.env
+ExecStart=/srv/cybertech/current/backend/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
