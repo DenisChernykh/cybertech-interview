@@ -1,0 +1,15 @@
+[Unit]
+Description=Cybertech demo local mail capture
+After=network.target
+
+[Service]
+User=cybertech
+Group=cybertech
+ExecStart=/usr/local/bin/mailpit --listen 127.0.0.1:8025 --smtp 127.0.0.1:1026 --database /srv/cybertech/shared/mailpit.db
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

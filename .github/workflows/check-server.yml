@@ -1,0 +1,33 @@
+name: Check demo server
+
+on:
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  check:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Configure SSH
+        env:
+          DEPLOY_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          test -n "$DEPLOY_KEY" && test -n "$DEPLOY_KNOWN_HOSTS"
+          mkdir -p "$HOME/.ssh"
+          chmod 700 "$HOME/.ssh"
+          printf '%s\n' "$DEPLOY_KEY" > "$HOME/.ssh/cybertech_deploy"
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/cybertech_deploy" "$HOME/.ssh/known_hosts"
+      - name: Verify SSH and deployment prerequisites
+        env:
+          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ vars.DEPLOY_USER }}
+        run: |
+          set -eu
+          case "$DEPLOY_HOST" in ''|*[!A-Za-z0-9.-]*) exit 1;; esac
+          case "$DEPLOY_USER" in ''|*[!a-z0-9_-]*) exit 1;; esac
+          ssh -i "$HOME/.ssh/cybertech_deploy" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o BatchMode=yes -o ConnectTimeout=15 "$DEPLOY_USER@$DEPLOY_HOST" 'test -w /srv/cybertech/incoming && test -r /srv/cybertech/shared/demo.env && /usr/local/bin/uv --version && sudo -n -l'
