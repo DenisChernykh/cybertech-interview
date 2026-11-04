@@ -1,6 +1,7 @@
 from concurrent.futures import ThreadPoolExecutor
 from datetime import timedelta
 from decimal import Decimal
+from smtplib import SMTPException
 from threading import Barrier
 
 import pytest
@@ -31,6 +32,7 @@ from app.services.processing import (
     process_operation,
     process_webhooks,
     reconcile,
+    send_mail,
     tick,
 )
 
@@ -146,6 +148,51 @@ def test_duplicate_and_stale_webhook_no_duplicate_effects(client, db):
         == 1
     )
     assert db.get(Payment, p["id"]).provider_status == "succeeded"
+
+
+def test_notification_uses_configured_sender_and_retries_after_smtp_failure(
+    client, db, monkeypatch
+):
+    settle(client)
+    monkeypatch.setattr(settings(), "smtp_sender", "demo@shop.example.com")
+    sent = []
+
+    class FakeSMTP:
+        fail = True
+
+        def __init__(self, host, port, timeout):
+            assert host == settings().smtp_host
+            assert port == settings().smtp_port
+            assert timeout == 5
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            pass
+
+        def send_message(self, message):
+            if self.fail:
+                raise SMTPException("temporary failure")
+            sent.append(message)
+
+    monkeypatch.setattr("app.services.processing.smtplib.SMTP", FakeSMTP)
+    send_mail()
+    db.expire_all()
+    item = db.scalar(select(EmailMessage))
+    assert item.status == "queued"
+    assert item.attempts == 1
+    with SessionLocal.begin() as session:
+        session.get(EmailMessage, item.id).next_check_at = now() - timedelta(seconds=1)
+
+    FakeSMTP.fail = False
+    send_mail()
+    db.expire_all()
+    assert db.get(EmailMessage, item.id).status == "accepted"
+    assert len(sent) == 1
+    assert sent[0]["From"] == "demo@shop.example.com"
+    assert sent[0]["To"] == "anna@example.com"
+    assert str(sent[0]["Message-ID"]).endswith("@shop.example.com>")
 
 
 def test_timeout_after_provider_commit_reuses_key(client, db, monkeypatch):

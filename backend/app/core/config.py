@@ -1,7 +1,7 @@
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import model_validator
+from pydantic import EmailStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     reservation_minutes: int = 30
     smtp_host: str = "localhost"
     smtp_port: int = 1026
+    smtp_sender: EmailStr = "shop@list.example"
     payment_provider: Literal["mock", "yookassa_test"] = "mock"
     yookassa_shop_id: str = ""
     yookassa_secret_key: str = ""

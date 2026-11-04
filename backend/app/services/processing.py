@@ -377,10 +377,11 @@ def send_mail():
         with SessionLocal() as db:
             item = db.get(EmailMessage, message_id)
             message = Mail()
-            message["From"] = "shop@list.example"
+            sender = settings().smtp_sender
+            message["From"] = sender
             message["To"] = item.recipient
             message["Subject"] = item.subject
-            message["Message-ID"] = f"<list-{item.id}@list.example>"
+            message["Message-ID"] = f"<list-{item.id}@{sender.rsplit('@', 1)[1]}>"
             message.set_content(item.body)
         try:
             with smtplib.SMTP(settings().smtp_host, settings().smtp_port, timeout=5) as smtp:
