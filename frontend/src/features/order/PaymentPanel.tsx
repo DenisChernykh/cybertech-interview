@@ -260,7 +260,7 @@ export default function PaymentPanel({
         <section className="receipts">
           <h3>Тестовая фискализация</h3>
           <p className="muted">
-            Фискальный документ не формируется. Это проверка состояния и данных чека.
+            Отображается статус тестового чека. Настоящий фискальный документ не формируется.
           </p>
           {order.receipts?.map((r) => (
             <div className="receipt-row" key={r.id}>
