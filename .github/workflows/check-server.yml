@@ -30,4 +30,15 @@ jobs:
           set -eu
           case "$DEPLOY_HOST" in ''|*[!A-Za-z0-9.-]*) exit 1;; esac
           case "$DEPLOY_USER" in ''|*[!a-z0-9_-]*) exit 1;; esac
-          ssh -i "$HOME/.ssh/cybertech_deploy" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o BatchMode=yes -o ConnectTimeout=15 "$DEPLOY_USER@$DEPLOY_HOST" 'test -w /srv/cybertech/incoming && test -r /srv/cybertech/shared/demo.env && /usr/local/bin/uv --version && sudo -n -l'
+          ssh -i "$HOME/.ssh/cybertech_deploy" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o BatchMode=yes -o ConnectTimeout=15 "$DEPLOY_USER@$DEPLOY_HOST" '
+            set -eu
+            test -w /srv/cybertech
+            test -w /srv/cybertech/incoming
+            test -w /srv/cybertech/releases
+            if test -e /srv/cybertech/deploy.lock; then
+              test -w /srv/cybertech/deploy.lock
+            fi
+            test -r /srv/cybertech/shared/demo.env
+            /usr/local/bin/uv --version
+            sudo -n -l
+          '
